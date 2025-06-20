@@ -106,7 +106,6 @@ local ESP_ENABLED = false
 local ESP_ShowBoxes = false
 local ESP_ShowNames = false
 local ESP_ShowTracers = false
-local ESP_ShowChams = false
 local ESP_Distance = 1000
 
 local ESP_Color = Color3.fromRGB(255, 0, 0) -- Цвет по умолчанию (красный)
@@ -114,47 +113,6 @@ local ESP_Color = Color3.fromRGB(255, 0, 0) -- Цвет по умолчанию 
 local boxes = {}
 local names = {}
 local tracers = {}
-local chams = {}
-
--- Функция создания чамса (прозрачного цвета на теле)
-local function createCham(player)
-    if chams[player.Name] then return end
-    local chamParts = {}
-
-    local function applyCham(part)
-        if part:IsA("BasePart") then
-            local cham = Instance.new("BoxHandleAdornment")
-            cham.Adornee = part
-            cham.AlwaysOnTop = true
-            cham.ZIndex = 10
-            cham.Size = part.Size
-            cham.Transparency = 0.5
-            cham.Color3 = ESP_Color
-            cham.Parent = part
-            table.insert(chamParts, cham)
-        end
-    end
-
-    local char = player.Character
-    if char then
-        for _, part in pairs(char:GetDescendants()) do
-            applyCham(part)
-        end
-    end
-
-    chams[player.Name] = chamParts
-end
-
-local function removeCham(player)
-    if chams[player.Name] then
-        for _, cham in pairs(chams[player.Name]) do
-            if cham and cham.Parent then
-                cham:Destroy()
-            end
-        end
-        chams[player.Name] = nil
-    end
-end
 
 local function createBox(player)
     if boxes[player.Name] then return end
@@ -211,7 +169,6 @@ local function removeESP(player)
         tracers[player.Name]:Remove()
         tracers[player.Name] = nil
     end
-    removeCham(player)
 end
 
 local function updateESPColor(newColor)
@@ -225,12 +182,6 @@ local function updateESPColor(newColor)
     end
     for _, line in pairs(tracers) do
         line.Color = ESP_Color
-    end
-    -- Обновляем чамсы
-    for playerName, adornments in pairs(chams) do
-        for _, adorn in pairs(adornments) do
-            adorn.Color3 = ESP_Color
-        end
     end
 end
 
@@ -255,11 +206,7 @@ ESPSection:NewToggle("Показывать линии", "", function(state)
     ESP_ShowTracers = state
 end)
 
-ESPSection:NewToggle("Показывать чамсы", "", function(state)
-    ESP_ShowChams = state
-end)
-
-ESPSection:NewColorPicker("Цвет ESP", "Выбрать цвет для ESP и Чамса", function(color)
+ESPSection:NewColorPicker("Цвет ESP", "Выбрать цвет для ESP", function(color)
     updateESPColor(color)
 end)
 
@@ -274,17 +221,6 @@ RunService.RenderStepped:Connect(function()
             if dist <= ESP_Distance then
                 local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
                 if onScreen then
-                    -- Чамсы
-                    if ESP_ShowChams then
-                        createCham(player)
-                        -- Обновляем цвет на всякий случай
-                        for _, adorn in pairs(chams[player.Name]) do
-                            adorn.Color3 = ESP_Color
-                        end
-                    else
-                        removeCham(player)
-                    end
-
                     -- Боксы
                     if ESP_ShowBoxes then
                         createBox(player)
@@ -338,7 +274,6 @@ RunService.RenderStepped:Connect(function()
                         names[player.Name]:Destroy()
                         names[player.Name] = nil
                     end
-                    removeCham(player)
                 end
             else
                 -- Игрок слишком далеко — скрываем все
@@ -348,7 +283,6 @@ RunService.RenderStepped:Connect(function()
                     names[player.Name]:Destroy()
                     names[player.Name] = nil
                 end
-                removeCham(player)
             end
         else
             -- Нет персонажа — убираем ESP
@@ -357,7 +291,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Очистка ESP при выходе игрока
 Players.PlayerRemoving:Connect(function(player)
     removeESP(player)
 end)
