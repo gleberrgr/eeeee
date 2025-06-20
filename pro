@@ -12,6 +12,7 @@ local Players = game:GetService("Players")
 local lp = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local Camera = workspace.CurrentCamera
 
 local char = lp.Character or lp.CharacterAdded:Wait()
 local humanoid = char:WaitForChild("Humanoid")
@@ -28,7 +29,10 @@ end)
 
 UserInputService.JumpRequest:Connect(function()
     if infiniteJump and lp.Character then
-        lp.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+        local hrp = lp.Character:FindFirstChildOfClass("Humanoid")
+        if hrp then
+            hrp:ChangeState("Jumping")
+        end
     end
 end)
 
@@ -74,10 +78,10 @@ local function removeESP(player)
 end
 
 local function createESP(player)
-    local char = player.Character
-    if not char then return end
+    local character = player.Character
+    if not character then return end
 
-    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.Health > 0 then
         local espName = player.Name .. "_ESP"
         if not espFolder:FindFirstChild(espName) then
@@ -87,7 +91,7 @@ local function createESP(player)
             highlight.FillTransparency = 0.5
             highlight.OutlineColor = Color3.new(1, 1, 1)
             highlight.OutlineTransparency = 0
-            highlight.Adornee = char
+            highlight.Adornee = character
             highlight.Parent = espFolder
 
             -- Подключаем удаление ESP при смерти, если ещё не подключено
@@ -122,13 +126,11 @@ local function onCharacterAdded(character)
         removeESP(player)
     end)
 
-    -- При появлении персонажа создаём ESP (если включено)
     if ESP_ENABLED then
         createESP(player)
     end
 end
 
--- Подключаем обработчики для существующих игроков
 for _, player in pairs(Players:GetPlayers()) do
     if player.Character then
         onCharacterAdded(player.Character)
@@ -136,12 +138,10 @@ for _, player in pairs(Players:GetPlayers()) do
     player.CharacterAdded:Connect(onCharacterAdded)
 end
 
--- Подключаем к новым игрокам
 Players.PlayerAdded:Connect(function(player)
     player.CharacterAdded:Connect(onCharacterAdded)
 end)
 
--- Кнопка переключения ESP в UI
 MainSection:NewToggle("ESP", "Подсвечивает игроков", function(state)
     ESP_ENABLED = state
     if not ESP_ENABLED then
@@ -185,12 +185,65 @@ end)
 TeleportSection:NewButton("Телепортироваться", "Телепорт к выбранному игроку", function()
     if selectedPlayer and Players:FindFirstChild(selectedPlayer) then
         local targetChar = Players[selectedPlayer].Character
-        if targetChar and lp.Character then
+        local myChar = lp.Character
+        if targetChar and myChar then
             local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
-            local myHRP = lp.Character:FindFirstChild("HumanoidRootPart")
+            local myHRP = myChar:FindFirstChild("HumanoidRootPart")
             if targetHRP and myHRP then
                 myHRP.CFrame = targetHRP.CFrame + Vector3.new(0, 3, 0)
             end
+        end
+    end
+end)
+
+-- === АИМБОТ ===
+local aimbotEnabled = false
+local aimFOV = 60  -- Угол прицела (градусы)
+local aimSmoothness = 0.2  -- Чем меньше — тем резче
+
+MainSection:NewToggle("Аимбот", "Автоматический прицел на ближайшего игрока", function(state)
+    aimbotEnabled = state
+end)
+
+-- Функция для поиска ближайшего врага в поле зрения
+local function getNearestTarget()
+    local nearestPlayer = nil
+    local nearestDistance = math.huge
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= lp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChildOfClass("Humanoid") then
+            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+            if humanoid.Health > 0 then
+                local pos = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+                local onScreen = pos.Z > 0
+                if onScreen then
+                    local screenPos = Vector2.new(pos.X, pos.Y)
+                    local mousePos = UserInputService:GetMouseLocation()
+                    local distance = (screenPos - mousePos).Magnitude
+                    if distance < aimFOV and distance < nearestDistance then
+                        nearestDistance = distance
+                        nearestPlayer = player
+                    end
+                end
+            end
+        end
+    end
+
+    return nearestPlayer
+end
+
+RunService.RenderStepped:Connect(function()
+    if aimbotEnabled and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        local target = getNearestTarget()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local targetPos = target.Character.HumanoidRootPart.Position
+            local camPos = Camera.CFrame.Position
+            local direction = (targetPos - camPos).Unit
+
+            -- Плавный поворот камеры к цели
+            local currentCFrame = Camera.CFrame
+            local targetCFrame = CFrame.new(camPos, camPos + direction)
+            Camera.CFrame = currentCFrame:Lerp(targetCFrame, aimSmoothness)
         end
     end
 end)
@@ -214,7 +267,7 @@ SettingsSection:NewKeybind("Скрыть/Показать GUI", "Изменит�
     end
 end)
 
--- === СМЕРТЬ И ПЕРЕЗАГРУЗКА ===
+-- Обновляем ссылки при респавне
 lp.CharacterAdded:Connect(function(newChar)
     char = newChar
     humanoid = newChar:WaitForChild("Humanoid")
