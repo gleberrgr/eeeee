@@ -20,12 +20,43 @@ local humanoid = char:WaitForChild("Humanoid")
 local MainTab = Window:NewTab("Главное")
 local MainSection = MainTab:NewSection("Функции")
 
--- Переменные управления функциями
+-- Бесконечный прыжок
 local infiniteJump = false
-local noclip = false
-local ESP_ENABLED = false
+MainSection:NewToggle("Бесконечный прыжок", "Позволяет прыгать бесконечно", function(state)
+    infiniteJump = state
+end)
 
--- ESP Folder
+UserInputService.JumpRequest:Connect(function()
+    if infiniteJump and lp.Character then
+        lp.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
+    end
+end)
+
+-- Ноуклип
+local noclip = false
+MainSection:NewToggle("Ноуклип", "Проходить сквозь стены", function(state)
+    noclip = state
+end)
+
+RunService.Stepped:Connect(function()
+    if lp.Character and noclip then
+        for _, part in ipairs(lp.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- Изменение скорости
+MainSection:NewSlider("Скорость", "Устанавливает скорость персонажа", 100, 16, function(s)
+    if humanoid then
+        humanoid.WalkSpeed = s
+    end
+end)
+
+-- === ESP ===
+local ESP_ENABLED = false
 local espFolder = Instance.new("Folder", game.CoreGui)
 espFolder.Name = "XenoESP"
 
@@ -57,53 +88,6 @@ local function updateESP()
     end
 end
 
--- Функция, которая выключает все функции после смерти
-local function disableAll()
-    infiniteJump = false
-    noclip = false
-    ESP_ENABLED = false
-    clearESP()
-    -- Вернем скорость к стандартной
-    if humanoid then
-        humanoid.WalkSpeed = 16
-    end
-end
-
--- === Функционал UI ===
-
-MainSection:NewToggle("Бесконечный прыжок", "Позволяет прыгать бесконечно", function(state)
-    infiniteJump = state
-end)
-
-UserInputService.JumpRequest:Connect(function()
-    if infiniteJump and lp.Character then
-        local h = lp.Character:FindFirstChildOfClass("Humanoid")
-        if h then
-            h:ChangeState("Jumping")
-        end
-    end
-end)
-
-MainSection:NewToggle("Ноуклип", "Проходить сквозь стены", function(state)
-    noclip = state
-end)
-
-RunService.Stepped:Connect(function()
-    if lp.Character and noclip then
-        for _, part in ipairs(lp.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
-end)
-
-MainSection:NewSlider("Скорость", "Устанавливает скорость персонажа", 100, 16, function(s)
-    if humanoid then
-        humanoid.WalkSpeed = s
-    end
-end)
-
 MainSection:NewToggle("ESP", "Подсвечивает игроков", function(state)
     ESP_ENABLED = state
     if ESP_ENABLED then
@@ -111,6 +95,57 @@ MainSection:NewToggle("ESP", "Подсвечивает игроков", function
     else
         clearESP()
     end
+end)
+
+-- === AIMBOT ===
+local AIMBOT_ENABLED = false
+local aimRadius = 50 -- Радиус аима по умолчанию
+local aimKeybind = Enum.KeyCode.X -- Горячая клавиша для аимбота
+
+local function getClosestPlayerToCursor(radius)
+    local mouse = lp:GetMouse()
+    local closestPlayer = nil
+    local shortestDistance = radius
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= lp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            local hrp = player.Character.HumanoidRootPart
+            local screenPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(hrp.Position)
+            if onScreen then
+                local dist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(mouse.X, mouse.Y)).Magnitude
+                if dist < shortestDistance then
+                    shortestDistance = dist
+                    closestPlayer = player
+                end
+            end
+        end
+    end
+
+    return closestPlayer
+end
+
+RunService.RenderStepped:Connect(function()
+    if AIMBOT_ENABLED then
+        local target = getClosestPlayerToCursor(aimRadius)
+        if target and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = target.Character.HumanoidRootPart
+            local camera = workspace.CurrentCamera
+            camera.CFrame = CFrame.new(camera.CFrame.Position, hrp.Position)
+        end
+    end
+end)
+
+MainSection:NewToggle("Aimbot", "Включить/выключить аимбот", function(state)
+    AIMBOT_ENABLED = state
+end)
+
+MainSection:NewSlider("Радиус аима", "Радиус, в котором аимбот ищет цель", 300, 50, function(value)
+    aimRadius = value
+end)
+
+MainSection:NewKeybind("Включить/выключить аимбот (Keybind)", "Горячая клавиша для аимбота", aimKeybind, function()
+    AIMBOT_ENABLED = not AIMBOT_ENABLED
+    print("Aimbot toggled:", AIMBOT_ENABLED)
 end)
 
 -- === ТЕЛЕПОРТ ===
@@ -163,7 +198,6 @@ local SettingsSection = SettingsTab:NewSection("Темы и UI")
 
 SettingsSection:NewDropdown("Сменить тему", "Изменяет тему интерфейса", Themes, function(theme)
     currentTheme = theme
-    -- Пересоздаём UI с новой темой (можно улучшить, чтобы не перезагружать всё)
     Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Robojini/Tuturial_UI_Library/main/UI_Template_1"))()
     Window = Library.CreateLib("Xeno Menu", currentTheme)
 end)
@@ -177,27 +211,8 @@ SettingsSection:NewKeybind("Скрыть/Показать GUI", "Изменит�
     end
 end)
 
--- === ОБРАБОТКА СМЕРТИ И ПЕРЕЗАГРУЗКИ ===
+-- === СМЕРТЬ И ПЕРЕЗАГРУЗКА ===
 lp.CharacterAdded:Connect(function(newChar)
-    -- Сбрасываем переменные и состояния
     char = newChar
     humanoid = newChar:WaitForChild("Humanoid")
-    
-    -- Включаем функции заново по умолчанию отключены
-    disableAll()
-    
-    -- Когда персонаж появляется, снова можно включить функции, если хочешь, например:
-    -- infiniteJump = false -- можно оставить так, чтобы пользователь сам включал
-    
-    humanoid.Died:Connect(function()
-        -- Когда персонаж умирает, отключаем все функции
-        disableAll()
-    end)
 end)
-
--- Если персонаж уже есть (например, при запуске скрипта)
-if char and humanoid then
-    humanoid.Died:Connect(function()
-        disableAll()
-    end)
-end
