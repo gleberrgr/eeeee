@@ -1,71 +1,40 @@
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Robojini/Tuturial_UI_Library/main/UI_Template_1"))()
- 
+
 local Themes = {
     "RJTheme1", "RJTheme2", "RJTheme3", "RJTheme4",
     "RJTheme5", "RJTheme6", "RJTheme7", "RJTheme8"
 }
- 
+
 local currentTheme = "RJTheme3"
 local Window = Library.CreateLib("Xeno Menu", currentTheme)
- 
+
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
- 
+
 local char = lp.Character or lp.CharacterAdded:Wait()
 local humanoid = char:WaitForChild("Humanoid")
- 
+
 -- === ГЛАВНОЕ ===
 local MainTab = Window:NewTab("Главное")
 local MainSection = MainTab:NewSection("Функции")
- 
--- Бесконечный прыжок
+
+-- Переменные управления функциями
 local infiniteJump = false
-MainSection:NewToggle("Бесконечный прыжок", "Позволяет прыгать бесконечно", function(state)
-    infiniteJump = state
-end)
- 
-UserInputService.JumpRequest:Connect(function()
-    if infiniteJump and lp.Character then
-        lp.Character:FindFirstChildOfClass("Humanoid"):ChangeState("Jumping")
-    end
-end)
- 
--- Ноуклип
 local noclip = false
-MainSection:NewToggle("Ноуклип", "Проходить сквозь стены", function(state)
-    noclip = state
-end)
- 
-RunService.Stepped:Connect(function()
-    if lp.Character and noclip then
-        for _, part in ipairs(lp.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
-end)
- 
--- Изменение скорости
-MainSection:NewSlider("Скорость", "Устанавливает скорость персонажа", 100, 16, function(s)
-    if humanoid then
-        humanoid.WalkSpeed = s
-    end
-end)
- 
--- === ESP ===
 local ESP_ENABLED = false
+
+-- ESP Folder
 local espFolder = Instance.new("Folder", game.CoreGui)
 espFolder.Name = "XenoESP"
- 
+
 local function clearESP()
     for _, v in pairs(espFolder:GetChildren()) do
         v:Destroy()
     end
 end
- 
+
 local function createESP(player)
     if player.Character then
         local highlight = Instance.new("Highlight")
@@ -78,7 +47,7 @@ local function createESP(player)
         highlight.Parent = espFolder
     end
 end
- 
+
 local function updateESP()
     clearESP()
     for _, p in ipairs(Players:GetPlayers()) do
@@ -87,7 +56,54 @@ local function updateESP()
         end
     end
 end
- 
+
+-- Функция, которая выключает все функции после смерти
+local function disableAll()
+    infiniteJump = false
+    noclip = false
+    ESP_ENABLED = false
+    clearESP()
+    -- Вернем скорость к стандартной
+    if humanoid then
+        humanoid.WalkSpeed = 16
+    end
+end
+
+-- === Функционал UI ===
+
+MainSection:NewToggle("Бесконечный прыжок", "Позволяет прыгать бесконечно", function(state)
+    infiniteJump = state
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if infiniteJump and lp.Character then
+        local h = lp.Character:FindFirstChildOfClass("Humanoid")
+        if h then
+            h:ChangeState("Jumping")
+        end
+    end
+end)
+
+MainSection:NewToggle("Ноуклип", "Проходить сквозь стены", function(state)
+    noclip = state
+end)
+
+RunService.Stepped:Connect(function()
+    if lp.Character and noclip then
+        for _, part in ipairs(lp.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+MainSection:NewSlider("Скорость", "Устанавливает скорость персонажа", 100, 16, function(s)
+    if humanoid then
+        humanoid.WalkSpeed = s
+    end
+end)
+
 MainSection:NewToggle("ESP", "Подсвечивает игроков", function(state)
     ESP_ENABLED = state
     if ESP_ENABLED then
@@ -96,15 +112,15 @@ MainSection:NewToggle("ESP", "Подсвечивает игроков", function
         clearESP()
     end
 end)
- 
+
 -- === ТЕЛЕПОРТ ===
 local TeleportTab = Window:NewTab("Телепорт")
 local TeleportSection = TeleportTab:NewSection("К игроку")
- 
+
 local dropdownNames = {}
 local dropdownObject
 local selectedPlayer
- 
+
 local function updateDropdown()
     table.clear(dropdownNames)
     for _, p in ipairs(Players:GetPlayers()) do
@@ -112,7 +128,7 @@ local function updateDropdown()
             table.insert(dropdownNames, p.Name)
         end
     end
- 
+
     if dropdownObject then
         dropdownObject:Refresh(dropdownNames, true)
     else
@@ -121,13 +137,13 @@ local function updateDropdown()
         end)
     end
 end
- 
+
 updateDropdown()
- 
+
 TeleportSection:NewButton("Обновить список", "Перезапускает дропдаун", function()
     updateDropdown()
 end)
- 
+
 TeleportSection:NewButton("Телепортироваться", "Телепорт к выбранному игроку", function()
     if selectedPlayer and Players:FindFirstChild(selectedPlayer) then
         local targetChar = Players[selectedPlayer].Character
@@ -140,17 +156,18 @@ TeleportSection:NewButton("Телепортироваться", "Телепор�
         end
     end
 end)
- 
+
 -- === НАСТРОЙКИ ===
 local SettingsTab = Window:NewTab("Настройки")
 local SettingsSection = SettingsTab:NewSection("Темы и UI")
- 
+
 SettingsSection:NewDropdown("Сменить тему", "Изменяет тему интерфейса", Themes, function(theme)
     currentTheme = theme
+    -- Пересоздаём UI с новой темой (можно улучшить, чтобы не перезагружать всё)
     Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Robojini/Tuturial_UI_Library/main/UI_Template_1"))()
     Window = Library.CreateLib("Xeno Menu", currentTheme)
 end)
- 
+
 local toggleKey = Enum.KeyCode.RightControl
 SettingsSection:NewKeybind("Скрыть/Показать GUI", "Изменить клавишу скрытия", toggleKey, function()
     for _, gui in ipairs(game.CoreGui:GetChildren()) do
@@ -159,10 +176,28 @@ SettingsSection:NewKeybind("Скрыть/Показать GUI", "Изменит�
         end
     end
 end)
- 
--- === СМЕРТЬ И ПЕРЕЗАГРУЗКА ===
+
+-- === ОБРАБОТКА СМЕРТИ И ПЕРЕЗАГРУЗКИ ===
 lp.CharacterAdded:Connect(function(newChar)
+    -- Сбрасываем переменные и состояния
     char = newChar
     humanoid = newChar:WaitForChild("Humanoid")
+    
+    -- Включаем функции заново по умолчанию отключены
+    disableAll()
+    
+    -- Когда персонаж появляется, снова можно включить функции, если хочешь, например:
+    -- infiniteJump = false -- можно оставить так, чтобы пользователь сам включал
+    
+    humanoid.Died:Connect(function()
+        -- Когда персонаж умирает, отключаем все функции
+        disableAll()
+    end)
 end)
- 
+
+-- Если персонаж уже есть (например, при запуске скрипта)
+if char and humanoid then
+    humanoid.Died:Connect(function()
+        disableAll()
+    end)
+end
