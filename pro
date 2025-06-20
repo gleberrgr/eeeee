@@ -173,9 +173,9 @@ local function createNameTag(player)
     bill.Adornee = player.Character and player.Character:FindFirstChild("HumanoidRootPart") or nil
     bill.Size = UDim2.new(0, 100, 0, 50)
     bill.AlwaysOnTop = true
-    bill.Parent = game.CoreGui
+    bill.Parent = lp:WaitForChild("PlayerGui")
 
-    local textLabel = Instance.new("TextLabel", bill)
+    local textLabel = Instance.new("TextLabel")
     textLabel.BackgroundTransparency = 1
     textLabel.TextColor3 = ESP_Color
     textLabel.TextStrokeTransparency = 0
@@ -183,6 +183,7 @@ local function createNameTag(player)
     textLabel.Size = UDim2.new(1, 0, 1, 0)
     textLabel.Font = Enum.Font.SourceSansBold
     textLabel.TextScaled = true
+    textLabel.Parent = bill
 
     names[player.Name] = bill
 end
@@ -301,37 +302,62 @@ RunService.RenderStepped:Connect(function()
                     -- Имена
                     if ESP_ShowNames then
                         createNameTag(player)
-                        if names[player.Name].Adornee ~= hrp then
-                            names[player.Name].Adornee = hrp
+                        local bill = names[player.Name]
+                        if bill then
+                            bill.Adornee = hrp
+                            bill.TextLabel.TextColor3 = ESP_Color
                         end
-                        names[player.Name].Enabled = true
-                        names[player.Name].TextLabel.TextColor3 = ESP_Color
                     else
                         if names[player.Name] then
-                            names[player.Name].Enabled = false
+                            names[player.Name]:Destroy()
+                            names[player.Name] = nil
                         end
                     end
 
                     -- Линии
                     if ESP_ShowTracers then
                         createTracer(player)
-                        tracers[player.Name].From = center
-                        tracers[player.Name].To = Vector2.new(pos.X, pos.Y)
-                        tracers[player.Name].Visible = true
-                        tracers[player.Name].Color = ESP_Color
+                        local line = tracers[player.Name]
+                        if line then
+                            line.From = center
+                            line.To = Vector2.new(pos.X, pos.Y)
+                            line.Color = ESP_Color
+                            line.Visible = true
+                        end
                     else
                         if tracers[player.Name] then
                             tracers[player.Name].Visible = false
                         end
                     end
+
                 else
-                    removeESP(player)
+                    -- Игрок вне экрана — скрываем все
+                    if boxes[player.Name] then boxes[player.Name].Visible = false end
+                    if tracers[player.Name] then tracers[player.Name].Visible = false end
+                    if names[player.Name] then
+                        names[player.Name]:Destroy()
+                        names[player.Name] = nil
+                    end
+                    removeCham(player)
                 end
             else
-                removeESP(player)
+                -- Игрок слишком далеко — скрываем все
+                if boxes[player.Name] then boxes[player.Name].Visible = false end
+                if tracers[player.Name] then tracers[player.Name].Visible = false end
+                if names[player.Name] then
+                    names[player.Name]:Destroy()
+                    names[player.Name] = nil
+                end
+                removeCham(player)
             end
         else
+            -- Нет персонажа — убираем ESP
             removeESP(player)
         end
     end
+end)
+
+-- Очистка ESP при выходе игрока
+Players.PlayerRemoving:Connect(function(player)
+    removeESP(player)
 end)
