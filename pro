@@ -109,19 +109,32 @@ local ESPTab = Window:NewTab("ESP")
 local ESPSection = ESPTab:NewSection("Подсветка игроков")
 
 local ESP_ENABLED = false
+local ESP_ShowBoxes = true
+local ESP_ShowNames = true
+local ESP_ShowTracers = true
+local ESP_Distance = 1000 -- дистанция отрисовки ESP
+
 local espFolder = Instance.new("Folder", game.CoreGui)
 espFolder.Name = "XenoESP"
+
+local tracers = {}
 
 local function clearESP()
     for _, v in pairs(espFolder:GetChildren()) do
         v:Destroy()
     end
+    tracers = {}
 end
 
 local function removeESP(player)
     local highlight = espFolder:FindFirstChild(player.Name .. "_ESP")
     if highlight then
         highlight:Destroy()
+    end
+    -- Удаляем линии-трейсеры
+    if tracers[player.Name] then
+        tracers[player.Name]:Destroy()
+        tracers[player.Name] = nil
     end
 end
 
@@ -131,6 +144,12 @@ local function createESP(player)
 
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if humanoid and humanoid.Health > 0 then
+        local distance = (Camera.CFrame.Position - character.HumanoidRootPart.Position).Magnitude
+        if distance > ESP_Distance then
+            removeESP(player)
+            return
+        end
+
         local espName = player.Name .. "_ESP"
         if not espFolder:FindFirstChild(espName) then
             local highlight = Instance.new("Highlight")
@@ -141,28 +160,186 @@ local function createESP(player)
             highlight.OutlineTransparency = 0
             highlight.Adornee = character
             highlight.Parent = espFolder
+        end
 
-            -- Подключаем удаление ESP при смерти, если ещё не подключено
-            if not humanoid:FindFirstChild("ESPDeathConn") then
-                local connMarker = Instance.new("BoolValue")
-                connMarker.Name = "ESPDeathConn"
-                connMarker.Parent = humanoid
-
-                humanoid.Died:Connect(function()
-                    removeESP(player)
-                end)
+        -- Создаем/обновляем линии-трейсеры
+        if ESP_ShowTracers then
+            if not tracers[player.Name] then
+                local tracer = Drawing.new("Line")
+                tracer.Color = Color3.new(1, 0, 0)
+                tracer.Thickness = 1.5
+                tracer.Transparency = 1
+                tracer.Visible = true
+                tracers[player.Name] = tracer
+            end
+        else
+            if tracers[player.Name] then
+                tracers[player.Name]:Remove()
+                tracers[player.Name] = nil
             end
         end
+    else
+        removeESP(player)
     end
 end
 
 local function updateESP()
-    if not ESP_ENABLED then return end
+    if not ESP_ENABLED then
+        clearESP()
+        return
+    end
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= lp then
             createESP(p)
         end
     end
+end
+
+local function updateTracers()
+    if not ESP_ENABLED or not ESP_ShowTracers then
+        for _, tracer in pairs(tracers) do
+            tracer.Visible = false
+        end
+        return
+    end
+
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+
+    for playerName, tracer in pairs(tracers) do
+        local player = Players:FindFirstChild(playerName)
+        if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            local distance = (Camera.CFrame.Position - hrp.Position).Magnitude
+            if distance <= ESP_Distance then
+                local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                if onScreen then
+                    local screenPos = Vector2.new(pos.X, pos.Y)
+                    tracer.From = screenCenter
+                    tracer.To = screenPos
+                    tracer.Visible = true
+                else
+                    tracer.Visible = false
+                end
+            else
+                tracer.Visible = false
+            end
+        else
+            tracer.Visible = false
+        end
+    end
+end
+
+local boxes = {}
+
+local function createBox(player)
+    if boxes[player.Name] then return end
+
+    local box = Drawing.new("Square")
+    box.Color = Color3.new(1, 0, 0)
+    box.Thickness = 2
+    box.Transparency = 1
+    box.Filled = false
+    box.Visible = true
+    boxes[player.Name] = box
+end
+
+local function removeBox(player)
+    if boxes[player.Name] then
+        boxes[player.Name]:Remove()
+        boxes[player.Name] = nil
+    end
+end
+
+local function updateBoxes()
+    if not ESP_ENABLED or not ESP_ShowBoxes then
+        for _, box in pairs(boxes) do
+            box.Visible = false
+        end
+        return
+    end
+
+    for playerName, box in pairs(boxes) do
+        local player = Players:FindFirstChild(playerName)
+        if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            local distance = (Camera.CFrame.Position - hrp.Position).Magnitude
+            if distance <= ESP_Distance then
+                local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+                if onScreen then
+                    local sizeFactor = 1000 / distance -- уменьшаем размер бокса с увеличением дистанции
+                    local boxSize = Vector2.new(50, 100) * sizeFactor
+
+                    box.Position = Vector2.new(pos.X - boxSize.X/2, pos.Y - boxSize.Y/2)
+                    box.Size = boxSize
+                    box.Visible = true
+                else
+                    box.Visible = false
+                end
+            else
+                box.Visible = false
+            end
+        else
+            box.Visible = false
+        end
+    end
+end
+
+local nameDrawings = {}
+
+local function createName(player)
+    if nameDrawings[player.Name] then return end
+
+    local nameLabel = Drawing.new("Text")
+    nameLabel.Color = Color3.new(1, 1, 1)
+    nameLabel.Size = 16
+    nameLabel.Center = true
+    nameLabel.Outline = true
+    nameLabel.Visible = true
+    nameDrawings[player.Name] = nameLabel
+end
+
+local function removeName(player)
+    if nameDrawings[player.Name] then
+        nameDrawings[player.Name]:Remove()
+        nameDrawings[player.Name] = nil
+    end
+end
+
+local function updateNames()
+    if not ESP_ENABLED or not ESP_ShowNames then
+        for _, nameLabel in pairs(nameDrawings) do
+            nameLabel.Visible = false
+        end
+        return
+    end
+
+    for playerName, nameLabel in pairs(nameDrawings) do
+        local player = Players:FindFirstChild(playerName)
+        if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = player.Character.HumanoidRootPart
+            local distance = (Camera.CFrame.Position - hrp.Position).Magnitude
+            if distance <= ESP_Distance then
+                local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 3, 0))
+                if onScreen then
+                    nameLabel.Position = Vector2.new(pos.X, pos.Y)
+                    nameLabel.Text = player.Name
+                    nameLabel.Visible = true
+                else
+                    nameLabel.Visible = false
+                end
+            else
+                nameLabel.Visible = false
+            end
+        else
+            nameLabel.Visible = false
+        end
+    end
+end
+
+local function removeAllESP(player)
+    removeESP(player)
+    removeBox(player)
+    removeName(player)
 end
 
 local function onCharacterAdded(character)
@@ -171,11 +348,13 @@ local function onCharacterAdded(character)
     local humanoid = character:WaitForChild("Humanoid")
 
     humanoid.Died:Connect(function()
-        removeESP(player)
+        removeAllESP(player)
     end)
 
     if ESP_ENABLED then
         createESP(player)
+        createBox(player)
+        createName(player)
     end
 end
 
@@ -186,116 +365,70 @@ for _, player in pairs(Players:GetPlayers()) do
     player.CharacterAdded:Connect(onCharacterAdded)
 end
 
-Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(onCharacterAdded)
+Players.PlayerRemoving:Connect(function(player)
+    removeAllESP(player)
 end)
 
-ESPSection:NewToggle("Включить ESP", "Подсвечивает игроков", function(state)
+-- ESP GUI элементы
+ESPSection:NewToggle("Включить ESP", "Включает/выключает ESP", function(state)
     ESP_ENABLED = state
-    if not ESP_ENABLED then
+    if not state then
         clearESP()
+        for _, box in pairs(boxes) do
+            box.Visible = false
+        end
+        for _, nameLabel in pairs(nameDrawings) do
+            nameLabel.Visible = false
+        end
+        for _, tracer in pairs(tracers) do
+            tracer.Visible = false
+        end
     else
-        updateESP()
-    end
-end)
-
--- === ВКЛАДКА АИМБОТА ===
-local AimTab = Window:NewTab("Аимбот")
-local AimSection = AimTab:NewSection("Настройки аимбота")
-
-local aimbotEnabled = false
-local aimRadius = 60
-local aimKey = Enum.KeyCode.E -- клавиша для аимбота
-
-AimSection:NewToggle("Включить аимбот", "Автоматический прицел на игроков", function(state)
-    aimbotEnabled = state
-end)
-
-AimSection:NewSlider("Радиус прицела", "Угол вокруг курсора для прицела", 100, 10, function(value)
-    aimRadius = value
-end)
-
-AimSection:NewKeybind("Клавиша аимбота", "Удерживайте, чтобы аимбот работал", aimKey, function()
-    -- В этом UI кейбинд – по нажатию/отпусканию не всегда можно, но имитируем с toggling
-end)
-
-local isAimKeyDown = false
-
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == aimKey then
-        isAimKeyDown = true
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.KeyCode == aimKey then
-        isAimKeyDown = false
-    end
-end)
-
-local function getNearestTarget()
-    local nearestPlayer = nil
-    local nearestDistance = math.huge
-
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= lp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChildOfClass("Humanoid") then
-            local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid.Health > 0 then
-                local pos = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
-                local onScreen = pos.Z > 0
-                if onScreen then
-                    local screenPos = Vector2.new(pos.X, pos.Y)
-                    local mousePos = UserInputService:GetMouseLocation()
-                    local distance = (screenPos - mousePos).Magnitude
-                    if distance < aimRadius and distance < nearestDistance then
-                        nearestDistance = distance
-                        nearestPlayer = player
-                    end
-                end
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= lp and player.Character then
+                createESP(player)
+                createBox(player)
+                createName(player)
             end
         end
     end
+end)
 
-    return nearestPlayer
-end
+ESPSection:NewToggle("Показывать боксы", "Показывать боксы вокруг игроков", function(state)
+    ESP_ShowBoxes = state
+    if not state then
+        for _, box in pairs(boxes) do
+            box.Visible = false
+        end
+    end
+end)
 
+ESPSection:NewToggle("Показывать имена", "Показывать имена игроков", function(state)
+    ESP_ShowNames = state
+    if not state then
+        for _, nameLabel in pairs(nameDrawings) do
+            nameLabel.Visible = false
+        end
+    end
+end)
+
+ESPSection:NewToggle("Показывать линии (tracers)", "Рисовать линии от центра экрана до игроков", function(state)
+    ESP_ShowTracers = state
+    if not state then
+        for _, tracer in pairs(tracers) do
+            tracer.Visible = false
+        end
+    end
+end)
+
+ESPSection:NewSlider("Макс. дистанция ESP", "Максимальная дистанция отрисовки ESP", 2000, 1000, function(value)
+    ESP_Distance = value
+end)
+
+-- Главный цикл обновления ESP и трейсеров
 RunService.RenderStepped:Connect(function()
-    if aimbotEnabled and isAimKeyDown and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-        local target = getNearestTarget()
-        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            local targetPos = target.Character.HumanoidRootPart.Position
-            local camPos = Camera.CFrame.Position
-            local direction = (targetPos - camPos).Unit
-
-            local currentCFrame = Camera.CFrame
-            local targetCFrame = CFrame.new(camPos, camPos + direction)
-            -- Плавное наведение
-            Camera.CFrame = currentCFrame:Lerp(targetCFrame, 0.3)
-        end
-    end
-end)
-
--- === НАСТРОЙКИ ===
-local SettingsTab = Window:NewTab("Настройки")
-local SettingsSection = SettingsTab:NewSection("Интерфейс и горячие клавиши")
-
-SettingsSection:NewDropdown("Сменить тему", "Выберите тему интерфейса", Themes, function(theme)
-    currentTheme = theme
-    -- Просто перезагружаем UI (нужно перезапустить скрипт для эффекта)
-end)
-
-local toggleKey = Enum.KeyCode.RightControl
-SettingsSection:NewKeybind("Клавиша скрытия GUI", "Нажмите, чтобы скрыть/показать меню", toggleKey, function()
-    for _, gui in ipairs(game.CoreGui:GetChildren()) do
-        if gui:IsA("ScreenGui") and gui.Name:find("RJ") then
-            gui.Enabled = not gui.Enabled
-        end
-    end
-end)
-
--- Обновляем ссылки при респавне
-lp.CharacterAdded:Connect(function(newChar)
-    char = newChar
-    humanoid = newChar:WaitForChild("Humanoid")
+    updateESP()
+    updateBoxes()
+    updateNames()
+    updateTracers()
 end)
