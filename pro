@@ -103,44 +103,63 @@ local ESPTab = Window:NewTab("ESP")
 local ESPSection = ESPTab:NewSection("Подсветка игроков")
 
 local ESP_ENABLED = false
-local ESP_ShowBoxes = true
-local ESP_ShowNames = true
-local ESP_ShowTracers = true
+local ESP_ShowBoxes = false
+local ESP_ShowNames = false
+local ESP_ShowTracers = false
+local ESP_ShowChams = false
 local ESP_Distance = 1000
+
+local ESP_Color = Color3.fromRGB(255, 0, 0) -- Цвет по умолчанию (красный)
 
 local boxes = {}
 local names = {}
 local tracers = {}
+local chams = {}
 
-ESPSection:NewToggle("Включить ESP", "", function(state)
-    ESP_ENABLED = state
-    if not state then
-        -- Очищаем все
-        for _, box in pairs(boxes) do box:Remove() end
-        for _, nameTag in pairs(names) do nameTag:Destroy() end
-        for _, tracer in pairs(tracers) do tracer:Remove() end
-        boxes = {}
-        names = {}
-        tracers = {}
+-- Функция создания чамса (прозрачного цвета на теле)
+local function createCham(player)
+    if chams[player.Name] then return end
+    local chamParts = {}
+
+    local function applyCham(part)
+        if part:IsA("BasePart") then
+            local cham = Instance.new("BoxHandleAdornment")
+            cham.Adornee = part
+            cham.AlwaysOnTop = true
+            cham.ZIndex = 10
+            cham.Size = part.Size
+            cham.Transparency = 0.5
+            cham.Color3 = ESP_Color
+            cham.Parent = part
+            table.insert(chamParts, cham)
+        end
     end
-end)
 
-ESPSection:NewToggle("Показывать боксы", "", function(state)
-    ESP_ShowBoxes = state
-end)
+    local char = player.Character
+    if char then
+        for _, part in pairs(char:GetDescendants()) do
+            applyCham(part)
+        end
+    end
 
-ESPSection:NewToggle("Показывать имена", "", function(state)
-    ESP_ShowNames = state
-end)
+    chams[player.Name] = chamParts
+end
 
-ESPSection:NewToggle("Показывать линии", "", function(state)
-    ESP_ShowTracers = state
-end)
+local function removeCham(player)
+    if chams[player.Name] then
+        for _, cham in pairs(chams[player.Name]) do
+            if cham and cham.Parent then
+                cham:Destroy()
+            end
+        end
+        chams[player.Name] = nil
+    end
+end
 
 local function createBox(player)
     if boxes[player.Name] then return end
     local box = Drawing.new("Square")
-    box.Color = Color3.fromRGB(255, 0, 0)
+    box.Color = ESP_Color
     box.Thickness = 2
     box.Filled = false
     box.Visible = true
@@ -158,7 +177,7 @@ local function createNameTag(player)
 
     local textLabel = Instance.new("TextLabel", bill)
     textLabel.BackgroundTransparency = 1
-    textLabel.TextColor3 = Color3.new(1, 0, 0)
+    textLabel.TextColor3 = ESP_Color
     textLabel.TextStrokeTransparency = 0
     textLabel.Text = player.Name
     textLabel.Size = UDim2.new(1, 0, 1, 0)
@@ -171,7 +190,7 @@ end
 local function createTracer(player)
     if tracers[player.Name] then return end
     local line = Drawing.new("Line")
-    line.Color = Color3.fromRGB(255, 0, 0)
+    line.Color = ESP_Color
     line.Thickness = 1.5
     line.Transparency = 1
     line.Visible = true
@@ -191,7 +210,57 @@ local function removeESP(player)
         tracers[player.Name]:Remove()
         tracers[player.Name] = nil
     end
+    removeCham(player)
 end
+
+local function updateESPColor(newColor)
+    ESP_Color = newColor
+    -- Обновляем цвета уже существующих элементов
+    for _, box in pairs(boxes) do
+        box.Color = ESP_Color
+    end
+    for _, bill in pairs(names) do
+        bill.TextLabel.TextColor3 = ESP_Color
+    end
+    for _, line in pairs(tracers) do
+        line.Color = ESP_Color
+    end
+    -- Обновляем чамсы
+    for playerName, adornments in pairs(chams) do
+        for _, adorn in pairs(adornments) do
+            adorn.Color3 = ESP_Color
+        end
+    end
+end
+
+ESPSection:NewToggle("Включить ESP", "", function(state)
+    ESP_ENABLED = state
+    if not state then
+        for _, player in pairs(Players:GetPlayers()) do
+            removeESP(player)
+        end
+    end
+end)
+
+ESPSection:NewToggle("Показывать боксы", "", function(state)
+    ESP_ShowBoxes = state
+end)
+
+ESPSection:NewToggle("Показывать имена", "", function(state)
+    ESP_ShowNames = state
+end)
+
+ESPSection:NewToggle("Показывать линии", "", function(state)
+    ESP_ShowTracers = state
+end)
+
+ESPSection:NewToggle("Показывать чамсы", "", function(state)
+    ESP_ShowChams = state
+end)
+
+ESPSection:NewColorPicker("Цвет ESP", "Выбрать цвет для ESP и Чамса", function(color)
+    updateESPColor(color)
+end)
 
 RunService.RenderStepped:Connect(function()
     if not ESP_ENABLED then return end
@@ -204,6 +273,17 @@ RunService.RenderStepped:Connect(function()
             if dist <= ESP_Distance then
                 local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
                 if onScreen then
+                    -- Чамсы
+                    if ESP_ShowChams then
+                        createCham(player)
+                        -- Обновляем цвет на всякий случай
+                        for _, adorn in pairs(chams[player.Name]) do
+                            adorn.Color3 = ESP_Color
+                        end
+                    else
+                        removeCham(player)
+                    end
+
                     -- Боксы
                     if ESP_ShowBoxes then
                         createBox(player)
@@ -211,6 +291,7 @@ RunService.RenderStepped:Connect(function()
                         boxes[player.Name].Position = Vector2.new(pos.X - size / 2, pos.Y - size / 2)
                         boxes[player.Name].Size = Vector2.new(size, size)
                         boxes[player.Name].Visible = true
+                        boxes[player.Name].Color = ESP_Color
                     else
                         if boxes[player.Name] then
                             boxes[player.Name].Visible = false
@@ -224,6 +305,7 @@ RunService.RenderStepped:Connect(function()
                             names[player.Name].Adornee = hrp
                         end
                         names[player.Name].Enabled = true
+                        names[player.Name].TextLabel.TextColor3 = ESP_Color
                     else
                         if names[player.Name] then
                             names[player.Name].Enabled = false
@@ -236,6 +318,7 @@ RunService.RenderStepped:Connect(function()
                         tracers[player.Name].From = center
                         tracers[player.Name].To = Vector2.new(pos.X, pos.Y)
                         tracers[player.Name].Visible = true
+                        tracers[player.Name].Color = ESP_Color
                     else
                         if tracers[player.Name] then
                             tracers[player.Name].Visible = false
