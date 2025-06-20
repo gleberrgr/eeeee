@@ -17,11 +17,10 @@ local Camera = workspace.CurrentCamera
 local char = lp.Character or lp.CharacterAdded:Wait()
 local humanoid = char:WaitForChild("Humanoid")
 
--- === ГЛАВНОЕ ===
+-- === ГЛАВНАЯ ВКЛАДКА ===
 local MainTab = Window:NewTab("Главное")
-local MainSection = MainTab:NewSection("Функции")
+local MainSection = MainTab:NewSection("Основные функции")
 
--- Бесконечный прыжок
 local infiniteJump = false
 MainSection:NewToggle("Бесконечный прыжок", "Позволяет прыгать бесконечно", function(state)
     infiniteJump = state
@@ -29,14 +28,13 @@ end)
 
 UserInputService.JumpRequest:Connect(function()
     if infiniteJump and lp.Character then
-        local hrp = lp.Character:FindFirstChildOfClass("Humanoid")
-        if hrp then
-            hrp:ChangeState("Jumping")
+        local hum = lp.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum:ChangeState("Jumping")
         end
     end
 end)
 
--- Ноуклип
 local noclip = false
 MainSection:NewToggle("Ноуклип", "Проходить сквозь стены", function(state)
     noclip = state
@@ -52,14 +50,64 @@ RunService.Stepped:Connect(function()
     end
 end)
 
--- Изменение скорости
-MainSection:NewSlider("Скорость", "Устанавливает скорость персонажа", 100, 16, function(s)
+MainSection:NewSlider("Скорость", "Изменяет скорость персонажа", 100, 16, function(value)
     if humanoid then
-        humanoid.WalkSpeed = s
+        humanoid.WalkSpeed = value
     end
 end)
 
--- === ESP ===
+-- === ВКЛАДКА ТЕЛЕПОРТА ===
+local TeleportTab = Window:NewTab("Телепорт")
+local TeleportSection = TeleportTab:NewSection("Телепорт к игроку")
+
+local dropdownNames = {}
+local dropdownObject
+local selectedPlayer
+
+local function updateDropdown()
+    table.clear(dropdownNames)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= lp then
+            table.insert(dropdownNames, p.Name)
+        end
+    end
+
+    if dropdownObject then
+        dropdownObject:Refresh(dropdownNames, true)
+    else
+        dropdownObject = TeleportSection:NewDropdown("Игроки", "Выберите игрока", dropdownNames, function(option)
+            selectedPlayer = option
+        end)
+    end
+end
+
+updateDropdown()
+
+TeleportSection:NewButton("Обновить список", "Обновляет список игроков", function()
+    updateDropdown()
+end)
+
+TeleportSection:NewButton("Телепортироваться", "Телепорт к выбранному игроку", function()
+    if selectedPlayer and Players:FindFirstChild(selectedPlayer) then
+        local targetChar = Players[selectedPlayer].Character
+        local myChar = lp.Character
+        if targetChar and myChar then
+            local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+            local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+            if targetHRP and myHRP then
+                myHRP.CFrame = targetHRP.CFrame + Vector3.new(0, 3, 0)
+            end
+        end
+    end
+end)
+
+Players.PlayerAdded:Connect(updateDropdown)
+Players.PlayerRemoving:Connect(updateDropdown)
+
+-- === ВКЛАДКА ESP ===
+local ESPTab = Window:NewTab("ESP")
+local ESPSection = ESPTab:NewSection("Подсветка игроков")
+
 local ESP_ENABLED = false
 local espFolder = Instance.new("Folder", game.CoreGui)
 espFolder.Name = "XenoESP"
@@ -142,7 +190,7 @@ Players.PlayerAdded:Connect(function(player)
     player.CharacterAdded:Connect(onCharacterAdded)
 end)
 
-MainSection:NewToggle("ESP", "Подсвечивает игроков", function(state)
+ESPSection:NewToggle("Включить ESP", "Подсвечивает игроков", function(state)
     ESP_ENABLED = state
     if not ESP_ENABLED then
         clearESP()
@@ -151,61 +199,41 @@ MainSection:NewToggle("ESP", "Подсвечивает игроков", function
     end
 end)
 
--- === ТЕЛЕПОРТ ===
-local TeleportTab = Window:NewTab("Телепорт")
-local TeleportSection = TeleportTab:NewSection("К игроку")
+-- === ВКЛАДКА АИМБОТА ===
+local AimTab = Window:NewTab("Аимбот")
+local AimSection = AimTab:NewSection("Настройки аимбота")
 
-local dropdownNames = {}
-local dropdownObject
-local selectedPlayer
-
-local function updateDropdown()
-    table.clear(dropdownNames)
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= lp then
-            table.insert(dropdownNames, p.Name)
-        end
-    end
-
-    if dropdownObject then
-        dropdownObject:Refresh(dropdownNames, true)
-    else
-        dropdownObject = TeleportSection:NewDropdown("Игроки", "Выбери игрока", dropdownNames, function(option)
-            selectedPlayer = option
-        end)
-    end
-end
-
-updateDropdown()
-
-TeleportSection:NewButton("Обновить список", "Перезапускает дропдаун", function()
-    updateDropdown()
-end)
-
-TeleportSection:NewButton("Телепортироваться", "Телепорт к выбранному игроку", function()
-    if selectedPlayer and Players:FindFirstChild(selectedPlayer) then
-        local targetChar = Players[selectedPlayer].Character
-        local myChar = lp.Character
-        if targetChar and myChar then
-            local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
-            local myHRP = myChar:FindFirstChild("HumanoidRootPart")
-            if targetHRP and myHRP then
-                myHRP.CFrame = targetHRP.CFrame + Vector3.new(0, 3, 0)
-            end
-        end
-    end
-end)
-
--- === АИМБОТ ===
 local aimbotEnabled = false
-local aimFOV = 60  -- Угол прицела (градусы)
-local aimSmoothness = 0.2  -- Чем меньше — тем резче
+local aimRadius = 60
+local aimKey = Enum.KeyCode.E -- клавиша для аимбота
 
-MainSection:NewToggle("Аимбот", "Автоматический прицел на ближайшего игрока", function(state)
+AimSection:NewToggle("Включить аимбот", "Автоматический прицел на игроков", function(state)
     aimbotEnabled = state
 end)
 
--- Функция для поиска ближайшего врага в поле зрения
+AimSection:NewSlider("Радиус прицела", "Угол вокруг курсора для прицела", 100, 10, function(value)
+    aimRadius = value
+end)
+
+AimSection:NewKeybind("Клавиша аимбота", "Удерживайте, чтобы аимбот работал", aimKey, function()
+    -- В этом UI кейбинд – по нажатию/отпусканию не всегда можно, но имитируем с toggling
+end)
+
+local isAimKeyDown = false
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == aimKey then
+        isAimKeyDown = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if input.KeyCode == aimKey then
+        isAimKeyDown = false
+    end
+end)
+
 local function getNearestTarget()
     local nearestPlayer = nil
     local nearestDistance = math.huge
@@ -220,7 +248,7 @@ local function getNearestTarget()
                     local screenPos = Vector2.new(pos.X, pos.Y)
                     local mousePos = UserInputService:GetMouseLocation()
                     local distance = (screenPos - mousePos).Magnitude
-                    if distance < aimFOV and distance < nearestDistance then
+                    if distance < aimRadius and distance < nearestDistance then
                         nearestDistance = distance
                         nearestPlayer = player
                     end
@@ -233,33 +261,32 @@ local function getNearestTarget()
 end
 
 RunService.RenderStepped:Connect(function()
-    if aimbotEnabled and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+    if aimbotEnabled and isAimKeyDown and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
         local target = getNearestTarget()
         if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
             local targetPos = target.Character.HumanoidRootPart.Position
             local camPos = Camera.CFrame.Position
             local direction = (targetPos - camPos).Unit
 
-            -- Плавный поворот камеры к цели
             local currentCFrame = Camera.CFrame
             local targetCFrame = CFrame.new(camPos, camPos + direction)
-            Camera.CFrame = currentCFrame:Lerp(targetCFrame, aimSmoothness)
+            -- Плавное наведение
+            Camera.CFrame = currentCFrame:Lerp(targetCFrame, 0.3)
         end
     end
 end)
 
 -- === НАСТРОЙКИ ===
 local SettingsTab = Window:NewTab("Настройки")
-local SettingsSection = SettingsTab:NewSection("Темы и UI")
+local SettingsSection = SettingsTab:NewSection("Интерфейс и горячие клавиши")
 
-SettingsSection:NewDropdown("Сменить тему", "Изменяет тему интерфейса", Themes, function(theme)
+SettingsSection:NewDropdown("Сменить тему", "Выберите тему интерфейса", Themes, function(theme)
     currentTheme = theme
-    Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Robojini/Tuturial_UI_Library/main/UI_Template_1"))()
-    Window = Library.CreateLib("Xeno Menu", currentTheme)
+    -- Просто перезагружаем UI (нужно перезапустить скрипт для эффекта)
 end)
 
 local toggleKey = Enum.KeyCode.RightControl
-SettingsSection:NewKeybind("Скрыть/Показать GUI", "Изменить клавишу скрытия", toggleKey, function()
+SettingsSection:NewKeybind("Клавиша скрытия GUI", "Нажмите, чтобы скрыть/показать меню", toggleKey, function()
     for _, gui in ipairs(game.CoreGui:GetChildren()) do
         if gui:IsA("ScreenGui") and gui.Name:find("RJ") then
             gui.Enabled = not gui.Enabled
