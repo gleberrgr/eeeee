@@ -66,25 +66,6 @@ local function clearESP()
     end
 end
 
-local function createESP(player)
-    local char = player.Character
-    if char then
-        local humanoid = char:FindFirstChildOfClass("Humanoid")
-        if humanoid and humanoid.Health > 0 then
-            if not espFolder:FindFirstChild(player.Name .. "_ESP") then
-                local highlight = Instance.new("Highlight")
-                highlight.Name = player.Name .. "_ESP"
-                highlight.FillColor = Color3.new(1, 0, 0)
-                highlight.FillTransparency = 0.5
-                highlight.OutlineColor = Color3.new(1, 1, 1)
-                highlight.OutlineTransparency = 0
-                highlight.Adornee = char
-                highlight.Parent = espFolder
-            end
-        end
-    end
-end
-
 local function removeESP(player)
     local highlight = espFolder:FindFirstChild(player.Name .. "_ESP")
     if highlight then
@@ -92,16 +73,42 @@ local function removeESP(player)
     end
 end
 
+local function createESP(player)
+    local char = player.Character
+    if not char then return end
+
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.Health > 0 then
+        local espName = player.Name .. "_ESP"
+        if not espFolder:FindFirstChild(espName) then
+            local highlight = Instance.new("Highlight")
+            highlight.Name = espName
+            highlight.FillColor = Color3.new(1, 0, 0)
+            highlight.FillTransparency = 0.5
+            highlight.OutlineColor = Color3.new(1, 1, 1)
+            highlight.OutlineTransparency = 0
+            highlight.Adornee = char
+            highlight.Parent = espFolder
+
+            -- Подключаем удаление ESP при смерти, если ещё не подключено
+            if not humanoid:FindFirstChild("ESPDeathConn") then
+                local connMarker = Instance.new("BoolValue")
+                connMarker.Name = "ESPDeathConn"
+                connMarker.Parent = humanoid
+
+                humanoid.Died:Connect(function()
+                    removeESP(player)
+                end)
+            end
+        end
+    end
+end
+
 local function updateESP()
     if not ESP_ENABLED then return end
     for _, p in pairs(Players:GetPlayers()) do
-        if p ~= lp and p.Character then
-            local humanoid = p.Character:FindFirstChildOfClass("Humanoid")
-            if humanoid and humanoid.Health > 0 then
-                createESP(p)
-            else
-                removeESP(p)
-            end
+        if p ~= lp then
+            createESP(p)
         end
     end
 end
@@ -110,9 +117,11 @@ local function onCharacterAdded(character)
     local player = Players:GetPlayerFromCharacter(character)
     if not player then return end
     local humanoid = character:WaitForChild("Humanoid")
+
     humanoid.Died:Connect(function()
         removeESP(player)
     end)
+
     -- При появлении персонажа создаём ESP (если включено)
     if ESP_ENABLED then
         createESP(player)
